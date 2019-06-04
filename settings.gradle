@@ -1,0 +1,4 @@
+rootProject.name = 'liquibase-docker'
+println 'database starting Docker'
+include 'database'
+

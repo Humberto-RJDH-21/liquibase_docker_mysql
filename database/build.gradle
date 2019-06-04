@@ -1,0 +1,63 @@
+apply plugin: 'com.bmuschko.docker-remote-api'
+
+
+import com.bmuschko.gradle.docker.tasks.image.Dockerfile
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerStartContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerRemoveContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerInspectContainer
+
+task removeContainer(type: DockerRemoveContainer) {
+    removeVolumes = true
+    force = true
+    targetContainerId 'liquibase-bd-container'
+    onError { exception ->
+        if (!exception.message.contains('No such container'))
+            throw exception
+    }
+}
+
+task copyProps(type: Copy) {
+    dependsOn removeContainer
+    group 'database'
+    from file('docker/charset.cnf')
+    into 'context/'
+}
+
+task createDockerfile(type: Dockerfile) {
+    group 'database'
+    dependsOn copyProps
+    from 'mysql:5.7.23'
+    label(['Author': '\'Humberto RJ <humberto.rjdh@gmail.com>\''])
+    destFile = new File('context/Dockerfile')
+    copyFile 'charset.cnf', '/etc/mysql/conf.d/charset.cnf'
+}
+
+task buildImage(type: DockerBuildImage) {
+    group 'database'
+    dependsOn createDockerfile
+    inputDir = createDockerfile.destFile.get().asFile.parentFile
+    def finalTag = 'rjdhumberto/liquibase-bd:1.0'
+    println "Created Image with tag: ${finalTag}"
+    noCache = true
+    remove = true
+    imageId = finalTag
+    tags.add(finalTag)
+}
+
+task createContainer(type: DockerCreateContainer) {
+    dependsOn buildImage
+    targetImageId buildImage.getImageId()
+    containerName = 'liquibase-bd-container'
+    //envVars = (['MYSQL_ROOT_PASSWORD','root-pw'])
+    envVars = ['MYSQL_ROOT_PASSWORD': ' RootDev#', 'MYSQL_DATABASE': 'liquibase', 'MYSQL_USER': 'UserDb', 'MYSQL_PASSWORD': 'UserPwd#']
+    portBindings = ['3506:3306']
+    cmd = ['mysqld']
+}
+
+
+task startContainer(type: DockerStartContainer) {
+    dependsOn createContainer
+    targetContainerId createContainer.getContainerId()
+}

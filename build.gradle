@@ -1,0 +1,53 @@
+apply plugin: 'liquibase'
+apply plugin: 'com.bmuschko.docker-remote-api'
+
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        jcenter()
+    }
+    dependencies {
+        classpath 'org.liquibase:liquibase-gradle-plugin:2.0.1'
+        classpath 'com.bmuschko:gradle-docker-plugin:4.9.0'
+    }
+}
+
+repositories {
+    jcenter()
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    liquibaseRuntime 'org.liquibase:liquibase-gradle-plugin:2.0.1'
+    liquibaseRuntime 'org.liquibase:liquibase-core:3.6.3'
+    liquibaseRuntime group: 'mysql', name: 'mysql-connector-java', version: '8.0.12'
+}
+
+def changelog = './liquibase/changelog-master.xml'
+def dbUser = 'UserDb'
+def dbPassword = 'UserPwd#'
+
+
+liquibase {
+    activities {
+        mainClassName 'org.liquibase.gradle.OutputEnablingLiquibaseRunner'
+        dev {
+            changeLogFile changelog
+            url 'jdbc:mysql://localhost:3506/liquibase?useSSL=false'
+            username dbUser
+            password dbPassword
+
+        }
+    /*        
+    prod {
+            changeLogFile changelog
+            url 'jdbc:jtds:sybase://localhost:5000/liquibase'
+            username 'fvera'
+            password 'f3rv3r4'
+        }
+    */
+    }
+    runList = 'dev'
+}
