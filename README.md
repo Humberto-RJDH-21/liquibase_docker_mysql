@@ -22,7 +22,7 @@ Initial setup for liquibase 3.6.3, docker and mysql
  
  + Build Docker & Gradle Update    
      
-    > `./run.sh` Creacion del contenedor de la base de datos y aplicación de los cambios sobre la bd.
+    > `./run.sh` Creación del contenedor de la base de datos y aplicación de los cambios sobre la bd.
  
  + Parámetros de conexión
     ```
