@@ -1,63 +1,125 @@
 apply plugin: 'com.bmuschko.docker-remote-api'
 
-
 import com.bmuschko.gradle.docker.tasks.image.Dockerfile
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
 import com.bmuschko.gradle.docker.tasks.container.DockerStartContainer
 import com.bmuschko.gradle.docker.tasks.container.DockerRemoveContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerStopContainer
 import com.bmuschko.gradle.docker.tasks.container.DockerInspectContainer
 
-task removeContainer(type: DockerRemoveContainer) {
-    removeVolumes = true
-    force = true
-    targetContainerId 'liquibase-bd-container'
+ext {
+    groupDocker = 'docker'
+}
+
+task checkContainer(type: DockerInspectContainer) {
+    group groupDocker
+    with {
+        containerId.set(dkrContainerId)
+    }
     onError { exception ->
-        if (!exception.message.contains('No such container'))
+        if (exception.message != null && !exception.message.contains('No such container'))
             throw exception
+        logger.quiet "No se pudo inspeccionar el contenedor!."
+    }
+}
+
+task stopContainer(type: DockerStopContainer) {
+    group groupDocker
+    dependsOn checkContainer
+    with {
+        containerId.set(dkrContainerId)
+    }
+    onError { exception ->
+        if (exception.message != null) {
+            if (!exception.message.contains('No such container')) {
+                throw exception
+            } else {
+                logger.quiet "No existe el contenedor con el ID: '${containerId.get()}'."
+            }
+        }
+        logger.quiet "No se pudo detener el contenedor!."
+    }
+}
+
+task removeContainer(type: DockerRemoveContainer) {
+    group groupDocker
+    dependsOn stopContainer
+    removeVolumes = true
+    with {
+        containerId.set(dkrContainerId)
+    }
+    onError { exception ->
+        if (exception.message != null && !exception.message.contains('No such container'))
+            throw exception
+        println 'No se pudo eliminar el contenedor!'
+    }
+}
+
+task removeImage(type: DockerRemoveImage) {
+    group groupDocker
+    dependsOn removeContainer
+    with {
+        imageId.set(dkrImageId)
+        force.set(true)
+    }
+    onError { exception ->
+        if (exception.message != null && !exception.message.contains('No such image'))
+            throw exception
+        println 'No se pudo eliminar la imagen!'
     }
 }
 
 task copyProps(type: Copy) {
+    group groupDocker
     dependsOn removeContainer
-    group 'database'
-    from file('docker/charset.cnf')
-    into 'context/'
+    from file('charset.cnf')
+    into 'docker/'
 }
 
 task createDockerfile(type: Dockerfile) {
-    group 'database'
+    group groupDocker
     dependsOn copyProps
-    from 'mysql:5.7.23'
-    label(['Author': '\'Humberto RJ <humberto.rjdh@gmail.com>\''])
-    destFile = new File('context/Dockerfile')
+    from 'mysql:latest'
+    label(['Author': dkrAuthor])
     copyFile 'charset.cnf', '/etc/mysql/conf.d/charset.cnf'
+    with {
+        destFile.set(new File('docker/Dockerfile'))
+    }
 }
 
 task buildImage(type: DockerBuildImage) {
-    group 'database'
-    dependsOn createDockerfile
-    inputDir = createDockerfile.destFile.get().asFile.parentFile
-    def finalTag = 'rjdhumberto/liquibase-bd:1.0'
-    println "Created Image with tag: ${finalTag}"
-    noCache = true
-    remove = true
-    imageId = finalTag
+    group groupDocker
+    dependsOn createDockerfile, removeImage
+    def finalTag = dkrImageId
     tags.add(finalTag)
+    with {
+        imageId.set(finalTag)
+        inputDir.set(createDockerfile.destFile.get().asFile.parentFile)
+        remove.set(true)
+    }
 }
 
 task createContainer(type: DockerCreateContainer) {
+    group groupDocker
     dependsOn buildImage
-    targetImageId buildImage.getImageId()
-    containerName = 'liquibase-bd-container'
-    //envVars = (['MYSQL_ROOT_PASSWORD','root-pw'])
-    envVars = ['MYSQL_ROOT_PASSWORD': ' RootDev#', 'MYSQL_DATABASE': 'liquibase', 'MYSQL_USER': 'UserDb', 'MYSQL_PASSWORD': 'UserPwd#']
-    portBindings = ['3506:3306']
-    cmd = ['mysqld']
+    restartPolicy('always', 999)
+    with {
+        imageId.set(buildImage.getImageId())
+        containerName.set(dkrContainerId)
+        cmd.set(['mysqld'])
+        portBindings.set(['3306:3306'])
+        envVars.set(['MYSQL_ROOT_PASSWORD': dkrBdRootPsw,
+                     'MYSQL_DATABASE'     : dkrBd,
+                     'MYSQL_USER'         : dkrBdUser,
+                     'MYSQL_PASSWORD'     : dkrBdUserPsw])
+        memory.set(new Long('3221225472'))
+    }
 }
 
-
 task startContainer(type: DockerStartContainer) {
+    group groupDocker
     dependsOn createContainer
     targetContainerId createContainer.getContainerId()
 }
