@@ -26,10 +26,10 @@ Initial setup for liquibase 3.6.3, docker and mysql
  
  + Parámetros de conexión
     ```
-        database: sapd
-        user: MtsUserDb
-        pass: MeltsanDev#
-        root-pwd: RootMtsDev#
+        database: utilsDb
+        user: DkrUserDb
+        pass: PswDkrDev#
+        root-pwd: RootPswDev#
         port: 3406
     ```  
     
